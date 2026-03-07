@@ -393,7 +393,7 @@ function predict(h, a, h2h, odds) {
     if(i>j) hW+=p; else if(i===j) d+=p; else aW+=p;
   }
   let mH=0.33,mD=0.27,mA=0.40;
-  if(odds?.home){ const rH=1/odds.home,rD=1/odds.draw,rA=1/odds.away,s=rH+rD+rA; mH=rH/s;mD=rD/s;mA=rA/s; }
+  if(odds?.home){ const rH=1/(parseFloat(odds.home)||2),rD=1/(parseFloat(odds.draw)||3.5),rA=1/(parseFloat(odds.away)||3),s=rH+rD+rA; mH=rH/s;mD=rD/s;mA=rA/s; }
   const fH=0.6*hW+0.4*mH, fD=0.6*d+0.4*mD, fA=0.6*aW+0.4*mA, tot=fH+fD+fA;
   const nH=fH/tot, nD=fD/tot, nA=fA/tot;
   lines.sort((a,b)=>b.p-a.p);
@@ -434,10 +434,48 @@ function FormDot({r}) {
   return <div style={{width:22,height:22,borderRadius:4,fontSize:9,fontWeight:800,background:`${map[r]||"#888"}22`,border:`1px solid ${map[r]||"#888"}`,color:map[r]||"#888",display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>;
 }
 
+
+function TeamPicker({value, onChange, label}) {
+  const [open, setOpen] = useState(false);
+  const [openLeague, setOpenLeague] = useState(null);
+  const leagues = [...new Set(TEAMS.map(t=>t.league))];
+  const selected = TEAMS.find(t=>t.slug===value);
+  const pick = (slug) => { onChange(slug); setOpen(false); setOpenLeague(null); };
+  return (
+    <div style={{position:"relative"}}>
+      <span style={lbl}>{label}</span>
+      <div onClick={()=>setOpen(o=>!o)} style={{...inp,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",userSelect:"none"}}>
+        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{selected?.name||"Pilih tim"}</span>
+        <span style={{marginLeft:6,fontSize:10,color:"#3a5570",flexShrink:0}}>{open?"▲":"▼"}</span>
+      </div>
+      {open && (
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:100,background:"#050e1f",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,maxHeight:340,overflowY:"auto",marginTop:2}}>
+          {leagues.map(lg=>{
+            const isOpen = openLeague===lg;
+            const teamsInLg = TEAMS.filter(t=>t.league===lg);
+            return (
+              <div key={lg}>
+                <div onClick={()=>setOpenLeague(isOpen?null:lg)} style={{padding:"8px 12px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",background:isOpen?"rgba(0,255,136,0.05)":"transparent",borderBottom:"1px solid rgba(255,255,255,0.04)"}}>
+                  <span style={{fontSize:11,color:isOpen?"#00ff88":"#7a9ab0",fontWeight:isOpen?700:400}}>{lg}</span>
+                  <span style={{fontSize:9,color:"#3a5570"}}>{isOpen?"▲":`▼ ${teamsInLg.length} tim`}</span>
+                </div>
+                {isOpen && teamsInLg.map(t=>(
+                  <div key={t.slug} onClick={()=>pick(t.slug)} style={{padding:"7px 20px",cursor:"pointer",fontSize:12,color:t.slug===value?"#00ff88":"#aabbcc",background:t.slug===value?"rgba(0,255,136,0.07)":"transparent",borderBottom:"1px solid rgba(255,255,255,0.03)"}}>
+                    {t.slug===value?"✓ ":""}{t.name}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 export default function App() {
   const [home, setHome] = useState("manchester-city");
   const [away, setAway] = useState("arsenal");
-  const [odds, setOdds] = useState({home:1.80,draw:3.70,away:4.50});
+  const [odds, setOdds] = useState({home:"1.80",draw:"3.70",away:"4.50"});
   const [state, setState] = useState("idle");
   const [result, setResult] = useState(null);
   const [src, setSrc] = useState("");
@@ -525,23 +563,13 @@ export default function App() {
       <div style={{maxWidth:760,margin:"0 auto",padding:"12px 12px 24px",display:"flex",flexDirection:"column",gap:10}}>
         <div style={card}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 30px 1fr",gap:10,alignItems:"end",marginBottom:12}}>
-            <div>
-              <span style={lbl}>🏠 Home</span>
-              <select value={home} onChange={e=>setHome(e.target.value)} style={inp}>
-                {leagues.map(lg=><optgroup key={lg} label={lg}>{TEAMS.filter(t=>t.league===lg).map(t=><option key={t.slug} value={t.slug}>{t.name}</option>)}</optgroup>)}
-              </select>
-            </div>
-            <div style={{textAlign:"center",color:"#2a4060",fontWeight:700,paddingBottom:8}}>VS</div>
-            <div>
-              <span style={lbl}>✈️ Away</span>
-              <select value={away} onChange={e=>setAway(e.target.value)} style={inp}>
-                {leagues.map(lg=><optgroup key={lg} label={lg}>{TEAMS.filter(t=>t.league===lg).map(t=><option key={t.slug} value={t.slug}>{t.name}</option>)}</optgroup>)}
-              </select>
-            </div>
+            <TeamPicker value={home} onChange={setHome} label="🏠 Home"/>
+            <div style={{textAlign:"center",color:"#2a4060",fontWeight:700,paddingTop:22}}>VS</div>
+            <TeamPicker value={away} onChange={setAway} label="✈️ Away"/>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
             {[["home","Home"],["draw","Draw"],["away","Away"]].map(([k,lb])=>(
-              <div key={k}><span style={lbl}>{lb} Odds</span><input type="number" step="0.05" min="1" value={odds[k]} onChange={e=>setOdds(p=>({...p,[k]:parseFloat(e.target.value)||1}))} style={inp}/></div>
+              <div key={k}><span style={lbl}>{lb} Odds</span><input type="text" inputMode="decimal" placeholder="e.g. 2.50" value={odds[k]} onChange={e=>setOdds(p=>({...p,[k]:e.target.value}))} onFocus={e=>e.target.select()} style={inp}/></div>
             ))}
           </div>
           <button onClick={run} disabled={home===away||state==="loading"} style={{width:"100%",padding:12,borderRadius:10,border:"none",background:home===away||state==="loading"?"rgba(255,255,255,0.04)":"linear-gradient(135deg,#00ff88,#00cc88)",color:home===away||state==="loading"?"#444":"#001a0d",fontWeight:900,fontSize:13,letterSpacing:3,cursor:"pointer",fontFamily:"monospace"}}>
@@ -561,9 +589,9 @@ export default function App() {
               <div style={{display:"flex",flexDirection:"column",gap:10}}>
                 <div style={{...card,textAlign:"center"}}>
                   <div style={{fontSize:9,color:"#3a5570",marginBottom:14}}>{homeTeam?.name} vs {awayTeam?.name}</div>
-                  <Bar label={`🏠 ${homeTeam?.name}`} pct={result.homeWin} color="#4488ff" sub={`Odds: ${odds.home}`}/>
-                  <Bar label="🤝 Draw" pct={result.draw} color="#ffcc00" sub={`Odds: ${odds.draw}`}/>
-                  <Bar label={`✈️ ${awayTeam?.name}`} pct={result.awayWin} color="#00ff88" sub={`Odds: ${odds.away}`}/>
+                  <Bar label={`🏠 ${homeTeam?.name}`} pct={result.homeWin} color="#4488ff" sub={`Odds: ${odds.home||"-"}`}/>
+                  <Bar label="🤝 Draw" pct={result.draw} color="#ffcc00" sub={`Odds: ${odds.draw||"-"}`}/>
+                  <Bar label={`✈️ ${awayTeam?.name}`} pct={result.awayWin} color="#00ff88" sub={`Odds: ${odds.away||"-"}`}/>
                   <div style={{marginTop:10,display:"flex",justifyContent:"center",gap:8,flexWrap:"wrap"}}>
                     <span style={{padding:"2px 8px",borderRadius:10,fontSize:9,background:`${result.confColor}22`,border:`1px solid ${result.confColor}`,color:result.confColor}}>Confidence: {result.confidence}</span>
                     <span style={{padding:"2px 8px",borderRadius:10,fontSize:9,background:"rgba(170,187,204,0.1)",border:"1px solid rgba(170,187,204,0.3)",color:"#aabbcc"}}>xG {result.xg.home} - {result.xg.away}</span>
